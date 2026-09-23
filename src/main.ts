@@ -1,0 +1,143 @@
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
+import { FaceController } from './avatar/face';
+import { BodyController } from './avatar/body';
+import { GazeController } from './avatar/gaze';
+import { IntentScheduler } from './behavior/scheduler';
+import { DialogBox } from './ui/dialog';
+import { DebugPanel } from './ui/debug';
+import { smoothing } from './core/spring';
+import { makeContinuityTest } from './dev/continuityTest';
+
+const app = document.getElementById('app')!;
+const canvas = document.getElementById('stage') as HTMLCanvasElement;
+const loadingEl = document.getElementById('loading')!;
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 20);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.enablePan = false;
+controls.minDistance = 0.6;
+controls.maxDistance = 3.5;
+
+const light = new THREE.DirectionalLight(0xffffff, Math.PI * 0.9);
+light.position.set(0.6, 1.4, 1.6);
+scene.add(light, new THREE.AmbientLight(0xffffff, 0.5));
+
+function resize(): void {
+  const w = app.clientWidth;
+  const h = app.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+async function loadVRM(): Promise<VRM> {
+  const loader = new GLTFLoader();
+  loader.register((parser) => new VRMLoaderPlugin(parser));
+  const gltf = await loader.loadAsync('/avatar/model.vrm', (p) => {
+    if (p.total) loadingEl.textContent = `載入角色中… ${Math.round((p.loaded / p.total) * 100)}%`;
+  });
+  const vrm = gltf.userData.vrm as VRM;
+  VRMUtils.removeUnnecessaryVertices(gltf.scene);
+  VRMUtils.combineSkeletons(gltf.scene);
+  VRMUtils.rotateVRM0(vrm); // VRM 0.x 面向 -Z，轉成面向相機
+  vrm.scene.traverse((o) => (o.frustumCulled = false));
+  return vrm;
+}
+
+async function main(): Promise<void> {
+  let vrm: VRM;
+  try {
+    vrm = await loadVRM();
+  } catch (err) {
+    loadingEl.textContent = `模型載入失敗：${(err as Error).message}（檢查 .env.local 的 AVATAR_VRM_PATH）`;
+    throw err;
+  }
+  scene.add(vrm.scene);
+  loadingEl.remove();
+
+  // 相機：胸上構圖（VTuber 常見框法）
+  vrm.scene.updateMatrixWorld(true);
+  const headPos = new THREE.Vector3();
+  vrm.humanoid.getNormalizedBoneNode('head')!.getWorldPosition(headPos);
+  const focusY = headPos.y - 0.14;
+  // 直式視窗時拉遠，讓胸上構圖完整入鏡
+  const frameCamera = () => {
+    const dist = 1.35 * Math.max(1, 0.95 / camera.aspect);
+    camera.position.set(0, headPos.y - 0.02, dist);
+    controls.target.set(0, focusY, 0);
+    controls.update();
+  };
+  frameCamera();
+
+  const headWorld = new THREE.Vector3();
+  const headNode = vrm.humanoid.getNormalizedBoneNode('head')!;
+  const userAngles = () => {
+    headNode.getWorldPosition(headWorld);
+    const d = camera.position.clone().sub(headWorld);
+    return { yaw: Math.atan2(d.x, d.z), pitch: Math.atan2(-d.y, Math.hypot(d.x, d.z)) };
+  };
+
+  const face = new FaceController(vrm);
+  const gaze = new GazeController(userAngles, () => face.blink.trigger());
+  const body = new BodyController(vrm, gaze);
+  const sched = new IntentScheduler(face, body, gaze);
+  vrm.lookAt!.autoUpdate = false;
+
+  const dialog = new DialogBox(app, () => sched.skipSpeech());
+  sched.onDialog = (d) => dialog.update(d);
+  const debug = new DebugPanel(app, sched);
+  if (window.innerWidth < 900) debug.collapse();
+
+  const frame = (dt: number) => {
+    sched.update(dt);
+    gaze.update(dt);
+    body.update(dt);
+    face.update(dt);
+    vrm.lookAt!.yaw = THREE.MathUtils.radToDeg(gaze.eyeYaw.x);
+    vrm.lookAt!.pitch = THREE.MathUtils.radToDeg(gaze.eyePitch.x);
+    vrm.update(dt);
+    face.apply(); // 必須在 vrm.update 之後
+    controls.update();
+    renderer.render(scene, camera);
+  };
+
+  // 除錯/調校用：step() 可在 rAF 被暫停時（分頁不可見）手動推進模擬
+  const step = (seconds: number, fpsStep = 60) => {
+    for (let i = 0; i < Math.round(seconds * fpsStep); i++) frame(1 / fpsStep);
+  };
+  const continuityTest = makeContinuityTest(vrm, sched, step);
+  Object.assign(window, { __avatar: { vrm, face, gaze, body, sched, camera, step, smoothing, continuityTest } });
+
+  const timer = new THREE.Timer();
+  timer.connect(document);
+  let fpsAcc = 0;
+  let fpsFrames = 0;
+  renderer.setAnimationLoop((time) => {
+    timer.update(time);
+    // 限制 dt：分頁切回來時不會一次跳一大步
+    const dt = Math.min(timer.getDelta(), 1 / 20);
+    frame(dt);
+
+    fpsAcc += dt;
+    fpsFrames++;
+    if (fpsAcc > 0.5) {
+      const fps = fpsFrames / fpsAcc;
+      fpsAcc = 0;
+      fpsFrames = 0;
+      debug.updateStatus(fps, `視線:${gaze.current} · 手勢:${body.activeGesture ?? '—'} · 情緒:${face.dominantEmotion}`);
+    }
+  });
+}
+
+main();

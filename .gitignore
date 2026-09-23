@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.env.local
+# 角色模型受授權限制（禁止再散佈），永遠不要進版控
+*.vrm
+*.vrma

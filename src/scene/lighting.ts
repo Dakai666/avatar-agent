@@ -29,14 +29,14 @@ export interface LightSettings {
 
 export const LIGHT_DEFAULTS: LightSettings = {
   keyIntensity: 2.6,
-  keyAzimuth: 28,
-  keyElevation: 32,
-  keyWarmth: 0.18,
-  ambient: 0.62,
-  ambientWarmth: -0.2,
-  rimIntensity: 0.35,
-  rimWidth: 0.35,
-  rimWarmth: -0.45,
+  keyAzimuth: -24,
+  keyElevation: 35,
+  keyWarmth: -0.1,
+  ambient: 0.88,
+  ambientWarmth: 0.05,
+  rimIntensity: 0,
+  rimWidth: 0,
+  rimWarmth: -0.95,
   glow: 0.35,
   glowWarmth: -0.1,
 };

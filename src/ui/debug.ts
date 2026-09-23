@@ -37,7 +37,7 @@ export class DebugPanel {
     this.root = document.createElement('aside');
     this.root.className = 'debug';
     this.root.innerHTML = `
-      <header><strong>除錯面板</strong><button class="collapse" title="收合">—</button></header>
+      <header><strong>除錯面板 <small class="hint">按 H 隱藏</small></strong><button class="collapse" title="收合">—</button></header>
       <div class="debug-body">
         <div class="status"></div>
         <section><h3>狀態</h3><div class="btns" data-group="state"></div></section>

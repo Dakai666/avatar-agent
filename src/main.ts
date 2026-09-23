@@ -106,6 +106,27 @@ async function main(): Promise<void> {
   debug.addLighting(lighting);
   if (window.innerWidth < 900) debug.collapse();
 
+  // H：隱藏/顯示除錯面板與連線狀態（對話框保留，提問還要用）；記在瀏覽器裡
+  const UI_HIDDEN_KEY = 'avatar.uiHidden';
+  const setUiHidden = (hidden: boolean) => {
+    app.classList.toggle('ui-hidden', hidden);
+    try {
+      localStorage.setItem(UI_HIDDEN_KEY, hidden ? '1' : '0');
+    } catch {
+      /* 無法存取 storage 時照樣運作 */
+    }
+  };
+  try {
+    setUiHidden(localStorage.getItem(UI_HIDDEN_KEY) === '1');
+  } catch {
+    /* 同上 */
+  }
+  window.addEventListener('keydown', (e) => {
+    const t = e.target as HTMLElement;
+    if (t.closest('input, textarea, [contenteditable]') || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'h' || e.key === 'H') setUiHidden(!app.classList.contains('ui-hidden'));
+  });
+
   // ---- 與 agent 的橋接（本機 hub，由 MCP server 提供） ----
   const bridge = new Bridge();
   const askFlow = new AskFlow(sched, dialog, (id, index, text) => bridge.answer({ id, index, text }));

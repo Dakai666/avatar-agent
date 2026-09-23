@@ -32,6 +32,8 @@ body {
 #app { position: fixed; inset: 0; }
 #stage { position: relative; width: 100%; height: 100%; display: block; }
 .stage-glow { position: absolute; inset: 0; pointer-events: none; }
+#app.ui-hidden .debug, #app.ui-hidden .link-dot { display: none; }
+.debug .hint { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 4px; }
 #loading {
   position: absolute; inset: 0; display: grid; place-items: center;
   color: var(--muted); font-size: 16px; pointer-events: none;

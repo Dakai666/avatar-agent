@@ -102,7 +102,8 @@ export class GazeController {
       case 'wander':
       default:
         if (Math.random() < 0.3) this.moveTo({ yaw: u.yaw, pitch: u.pitch });
-        else this.moveTo({ yaw: rand(-0.5, 0.5) * e, pitch: rand(-0.15, 0.22) });
+        // 垂直以使用者為中心游移（相機在眼睛下方，以正前方為中心會整體偏高）
+        else this.moveTo({ yaw: rand(-0.5, 0.5) * e, pitch: u.pitch + rand(-0.15, 0.2) });
         return rand(1.2, 3.5) / e;
     }
   }

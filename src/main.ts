@@ -82,11 +82,11 @@ async function main(): Promise<void> {
   };
   frameCamera();
 
-  const headWorld = new THREE.Vector3();
-  const headNode = vrm.humanoid.getNormalizedBoneNode('head')!;
+  const eyeWorld = new THREE.Vector3();
+  // 從眼睛高度量（lookAt 原點），不是頭骨：頭骨比眼睛低約 6cm，會讓視線整體偏高
   const userAngles = () => {
-    headNode.getWorldPosition(headWorld);
-    const d = camera.position.clone().sub(headWorld);
+    vrm.lookAt!.getLookAtWorldPosition(eyeWorld);
+    const d = camera.position.clone().sub(eyeWorld);
     return { yaw: Math.atan2(d.x, d.z), pitch: Math.atan2(-d.y, Math.hypot(d.x, d.z)) };
   };
 

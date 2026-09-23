@@ -57,7 +57,8 @@ export class BodyController {
    */
   private flip: boolean;
   private gestures: ActiveGesture[] = [];
-  private clock = 0;
+  /** idle 雜訊的相位：以積分累加，速度改變時相位仍連續（不可用 clock × 速度） */
+  private noisePhase = 0;
   private breathPhase = 0;
 
   /** idle 活躍度：雜訊幅度與速度 */
@@ -152,10 +153,10 @@ export class BodyController {
   }
 
   update(dt: number): void {
-    this.clock += dt;
     const energy = this.energy.update(dt);
     const breathRate = this.breathRate.update(dt);
     this.breathPhase += dt * breathRate * Math.PI * 2;
+    this.noisePhase += dt * (0.35 + energy * 0.25);
 
     // --- 手勢推進 ---
     for (const g of this.gestures) {
@@ -176,7 +177,7 @@ export class BodyController {
     // 呼吸：吸氣時胸口微抬、肩膀上提
     const breath = Math.sin(this.breathPhase);
     const breathIn = (breath + 1) / 2;
-    const t = this.clock * (0.35 + energy * 0.25);
+    const t = this.noisePhase;
     const n = (seed: number, amp: number) => fbm1(t + seed * 7.3, seed) * amp * energy;
 
     const idle: Partial<Record<string, Vec3>> = {

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "avatar": {
+      "command": "node",
+      "args": [
+        "server/mcp.ts"
+      ],
+      "env": {
+        "AVATAR_NAME": "Agent"
+      }
+    }
+  }
+}

@@ -39,8 +39,52 @@ src/
 
 除錯面板也可以即時切換「彈簧平滑」「意圖排程器」，用眼睛比較差異。
 
-## 下一步（Phase 2）
+## 接上 agent（MCP）
 
-- MCP server（stdio）+ WebSocket 橋接：把 agent 的工具呼叫轉成 `AvatarCommand` 送到頁面
-- `avatar.ask`：阻塞式工具，在對話框顯示選項，使用者點選後回傳給 agent
-- Claude Code hooks 自動映射工具事件 → 狀態（不需要 agent 主動呼叫）
+```
+Claude Code ──stdio──▶ server/mcp.ts ──┐
+   │ hooks (async)                      ├─ hub（port 5179，第一個啟動的 MCP 行程擔任）
+   └──▶ server/hook.ts ──POST /hook──▶  │   ├─ WebSocket ⇄ 瀏覽器頁面
+其他 session 的 MCP ──WebSocket relay──▶ ┘   └─ 提供 dist/ 頁面與本機模型
+```
+
+1. `npm run build`（hub 會直接提供打包後的頁面）
+2. 在本專案目錄啟動 Claude Code：`.mcp.json` 註冊 `avatar` MCP server，`.claude/settings.json` 註冊 hooks
+3. 瀏覽器開 <http://127.0.0.1:5179/>（開發時也可用 Vite 的 5178，兩者都會連到 hub）
+
+### 工具
+
+| 工具 | 用途 |
+|---|---|
+| `avatar_say` | 說一句話（對話框 + 嘴型），可附情緒、手勢；不阻塞 |
+| `avatar_set_state` | 切換狀態（hooks 推不出來的，如 happy / troubled） |
+| `avatar_express` | 情緒 / 手勢 / 視線 |
+| `avatar_ask` | 在對話框顯示選項與輸入框，**阻塞直到使用者回答**或逾時 |
+| `avatar_status` | 頁面是否開啟、網址 |
+
+### Hooks 對應（server/hookMap.ts）
+
+| 事件 | 角色 |
+|---|---|
+| SessionStart | 揮手 + 開心 |
+| UserPromptSubmit | 點頭 → 思考 |
+| PreToolUse | Read/Grep/Glob/Web* → 閱讀；Bash/Edit/Write → 工作；Task/Agent → 思考；AskUserQuestion → 等待 |
+| PermissionRequest / Notification | 等待回應 |
+| PostToolUseFailure | 短暫難過 |
+| Stop / StopFailure | 閒置 / 困擾 |
+
+hook 以 `async` 執行，不會拖慢 Claude；轉發器只送事件名與工具名，不送 payload 其他內容。
+
+### 多 session
+
+第一個啟動的 MCP 行程成為 hub，其餘自動成為 relay；hub 所在 session 結束時，其他 session 在約 1 秒內接手，頁面自動重連。
+
+### 安全
+
+hub 只綁 127.0.0.1；瀏覽器連線必須來自允許的 Origin（擋掉其他網站連進本機、偷答提問）；所有指令經 zod 驗證。
+
+### 測試腳本
+
+- `npm run smoke`：列出工具、驗證參數檢查
+- `npm run scenario`：端對端情境（需開頁面，最後會發問等你點）
+- `node scripts/multi.ts`：hub / relay / 接手 / hook

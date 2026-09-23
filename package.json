@@ -6,15 +6,22 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "mcp": "node server/mcp.ts",
+    "smoke": "node scripts/smoke.ts",
+    "scenario": "node scripts/scenario.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.1",
     "@pixiv/three-vrm": "3.5.5",
-    "three": "0.186.0"
+    "three": "0.186.0",
+    "ws": "^8.21.3",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/three": "0.186.0",
+    "@types/ws": "^8.18.1",
     "typescript": "5.9.3",
     "vite": "8.3.0"
   }

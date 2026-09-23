@@ -10,6 +10,8 @@ import { DialogBox } from './ui/dialog';
 import { DebugPanel } from './ui/debug';
 import { smoothing } from './core/spring';
 import { makeContinuityTest } from './dev/continuityTest';
+import { Bridge } from './net/bridge';
+import { AskFlow } from './behavior/ask';
 
 const app = document.getElementById('app')!;
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
@@ -99,6 +101,30 @@ async function main(): Promise<void> {
   const debug = new DebugPanel(app, sched);
   if (window.innerWidth < 900) debug.collapse();
 
+  // ---- 與 agent 的橋接（本機 hub，由 MCP server 提供） ----
+  const bridge = new Bridge();
+  const askFlow = new AskFlow(sched, dialog, (id, index, text) => bridge.answer({ id, index, text }));
+  const linkDot = document.createElement('div');
+  linkDot.className = 'link-dot';
+  app.appendChild(linkDot);
+  const LINK_LABEL = { connecting: '連線中', online: 'Agent 已連線', offline: '等待 Agent' } as const;
+  bridge.onStatus = (s) => {
+    linkDot.dataset.status = s;
+    linkDot.textContent = LINK_LABEL[s];
+  };
+  bridge.onStatus(bridge.status);
+  bridge.onCommand = (cmd) => sched.send(cmd);
+  bridge.onAsk = (ask) => askFlow.enqueue(ask);
+  bridge.onAskCancel = (id) => askFlow.cancel(id);
+  bridge.connect();
+
+  // 本機測試提問（不經 agent）
+  debug.addAction('ask', '測試提問', () => {
+    const id = `local-${Date.now()}`;
+    const local = new AskFlow(sched, dialog, (_id, index, text) => sched.send({ type: 'say', text: `收到，你選了「${text}」${index < 0 ? '（自由輸入）' : ''}`, name: 'Agent' }));
+    local.enqueue({ id, question: '這個指令會刪除 build 資料夾，要繼續嗎？', options: ['繼續執行', '先備份再執行', '取消'], allowText: true, name: 'Agent' });
+  });
+
   const frame = (dt: number) => {
     sched.update(dt);
     gaze.update(dt);
@@ -117,7 +143,7 @@ async function main(): Promise<void> {
     for (let i = 0; i < Math.round(seconds * fpsStep); i++) frame(1 / fpsStep);
   };
   const continuityTest = makeContinuityTest(vrm, sched, step);
-  Object.assign(window, { __avatar: { vrm, face, gaze, body, sched, camera, step, smoothing, continuityTest } });
+  Object.assign(window, { __avatar: { vrm, face, gaze, body, sched, camera, step, smoothing, continuityTest, bridge, askFlow } });
 
   const timer = new THREE.Timer();
   timer.connect(document);

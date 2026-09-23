@@ -47,6 +47,7 @@ export class DebugPanel {
           <div class="say-row"><input class="say-input" placeholder="輸入台詞，Enter 送出"><button class="say-btn">說</button></div>
           <div class="btns" data-group="lines"></div>
         </section>
+        <section><h3>提問（對話框選項）</h3><div class="btns" data-group="ask"></div></section>
         <section><h3>連貫性測試</h3>
           <label><input type="checkbox" class="chaos"> 混亂模式（模擬 agent 高頻事件）</label>
           <label><input type="checkbox" class="smooth" checked> 彈簧平滑</label>
@@ -122,6 +123,14 @@ export class DebugPanel {
     row.textContent = `${(e.at / 1000).toFixed(2)}s [${tag}] ${e.text}`;
     this.logEl.prepend(row);
     while (this.logEl.childElementCount > 60) this.logEl.lastElementChild!.remove();
+  }
+
+  /** 由外部加上的動作按鈕 */
+  addAction(group: 'ask', label: string, fn: () => void): void {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.addEventListener('click', fn);
+    this.root.querySelector(`[data-group="${group}"]`)!.appendChild(b);
   }
 
   collapse(): void {

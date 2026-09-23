@@ -30,8 +30,12 @@ export interface StateDef {
 const CHIN_R = { upper: [-0.18, -0.86, 0.48] as [number, number, number], fore: [0.48, 0.84, 0.3] as [number, number, number], twist: 0.4, hand: [0.1, 0.4, 0.5] as [number, number, number] };
 /** 手在身前（打字/操作） */
 const WORK_L = { upper: [0.28, -0.88, 0.38] as [number, number, number], fore: [0.08, -0.08, 1] as [number, number, number], hand: [0.2, 0, -0.1] as [number, number, number] };
-/** 雙手在身前輕握（等待） */
-const WAIT_L = { upper: [0.18, -0.95, 0.25] as [number, number, number], fore: [-0.55, -0.55, 0.62] as [number, number, number], hand: [0, 0.3, -0.1] as [number, number, number] };
+/**
+ * 雙手在身前相疊（等待）：左手在下、右手疊在上面且稍微往前，手背朝外。
+ * 不能左右對稱——對稱時兩手在同一平面，手指會互相穿插。
+ */
+const WAIT_L = { upper: [0.18, -0.95, 0.27] as [number, number, number], fore: [-0.62, -0.52, 0.64] as [number, number, number], hand: [1.2, 0.3, -0.1] as [number, number, number] };
+const WAIT_R = mirrorArm({ upper: [0.18, -0.95, 0.3], fore: [-0.5, -0.5, 0.72], hand: [1.2, 0.3, -0.1] });
 
 export const STATE_DEFS: Record<AvatarState, StateDef> = {
   idle: {
@@ -118,7 +122,7 @@ export const STATE_DEFS: Record<AvatarState, StateDef> = {
     pose: {
       euler: { spine: [0.05, 0, 0], neck: [0.02, 0, 0.04], head: [0.02, 0, 0.1] },
       left: WAIT_L,
-      right: mirrorArm(WAIT_L),
+      right: WAIT_R,
     },
     face: { BRW_Surprised: 0.3, MTH_Small: 0.2 },
     emotion: { emotion: 'joy', intensity: 0.15 },

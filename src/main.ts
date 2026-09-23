@@ -12,6 +12,7 @@ import { smoothing } from './core/spring';
 import { makeContinuityTest } from './dev/continuityTest';
 import { Bridge } from './net/bridge';
 import { AskFlow } from './behavior/ask';
+import { Lighting } from './scene/lighting';
 
 const app = document.getElementById('app')!;
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
@@ -29,9 +30,11 @@ controls.enablePan = false;
 controls.minDistance = 0.6;
 controls.maxDistance = 3.5;
 
-const light = new THREE.DirectionalLight(0xffffff, Math.PI * 0.9);
-light.position.set(0.6, 1.4, 1.6);
-scene.add(light, new THREE.AmbientLight(0xffffff, 0.5));
+// 背景光暈放在畫布後面（畫布是透明的）
+const glowEl = document.createElement('div');
+glowEl.className = 'stage-glow';
+app.insertBefore(glowEl, canvas);
+const lighting = new Lighting(scene, glowEl);
 
 function resize(): void {
   const w = app.clientWidth;
@@ -66,6 +69,7 @@ async function main(): Promise<void> {
     throw err;
   }
   scene.add(vrm.scene);
+  lighting.attachModel(vrm.scene);
   loadingEl.remove();
 
   // 相機：胸上構圖（VTuber 常見框法）
@@ -99,6 +103,7 @@ async function main(): Promise<void> {
   const dialog = new DialogBox(app, () => sched.skipSpeech());
   sched.onDialog = (d) => dialog.update(d);
   const debug = new DebugPanel(app, sched);
+  debug.addLighting(lighting);
   if (window.innerWidth < 900) debug.collapse();
 
   // ---- 與 agent 的橋接（本機 hub，由 MCP server 提供） ----
@@ -143,7 +148,7 @@ async function main(): Promise<void> {
     for (let i = 0; i < Math.round(seconds * fpsStep); i++) frame(1 / fpsStep);
   };
   const continuityTest = makeContinuityTest(vrm, sched, step);
-  Object.assign(window, { __avatar: { vrm, face, gaze, body, sched, camera, step, smoothing, continuityTest, bridge, askFlow } });
+  Object.assign(window, { __avatar: { vrm, face, gaze, body, sched, camera, step, smoothing, continuityTest, bridge, askFlow, lighting } });
 
   const timer = new THREE.Timer();
   timer.connect(document);

@@ -2,6 +2,7 @@ import { EMOTIONS, GAZE_TARGETS, GESTURES, STATES, type AvatarCommand } from '..
 import { STATE_DEFS } from '../behavior/states';
 import type { IntentScheduler, LogEntry } from '../behavior/scheduler';
 import { smoothing } from '../core/spring';
+import { LIGHT_SLIDERS, type Lighting } from '../scene/lighting';
 
 /**
  * 除錯面板：手動送指令、混亂測試、平滑/排程開關、事件紀錄。
@@ -52,6 +53,9 @@ export class DebugPanel {
           <label><input type="checkbox" class="chaos"> 混亂模式（模擬 agent 高頻事件）</label>
           <label><input type="checkbox" class="smooth" checked> 彈簧平滑</label>
           <label><input type="checkbox" class="sched" checked> 意圖排程器</label>
+        </section>
+        <section class="lighting"><h3>光線</h3><div class="sliders"></div>
+          <div class="btns"><button class="light-reset">重設</button><button class="light-copy">複製設定</button></div>
         </section>
         <section class="log-section"><h3>事件紀錄</h3><div class="log"></div></section>
       </div>`;
@@ -123,6 +127,47 @@ export class DebugPanel {
     row.textContent = `${(e.at / 1000).toFixed(2)}s [${tag}] ${e.text}`;
     this.logEl.prepend(row);
     while (this.logEl.childElementCount > 60) this.logEl.lastElementChild!.remove();
+  }
+
+  /** 光線滑桿：即時套用、存在瀏覽器；「複製設定」可貼給 agent 寫成預設值 */
+  addLighting(lighting: Lighting): void {
+    const box = this.root.querySelector('.lighting .sliders')!;
+    const inputs = new Map<string, { input: HTMLInputElement; out: HTMLElement }>();
+    const sync = () => {
+      for (const def of LIGHT_SLIDERS) {
+        const r = inputs.get(def.key)!;
+        r.input.value = String(lighting.settings[def.key]);
+        r.out.textContent = String(lighting.settings[def.key]);
+      }
+    };
+    for (const def of LIGHT_SLIDERS) {
+      const row = document.createElement('label');
+      row.className = 'slider-row';
+      row.innerHTML = `<span>${def.label}</span><input type="range" min="${def.min}" max="${def.max}" step="${def.step}"><output></output>`;
+      const input = row.querySelector('input')!;
+      const out = row.querySelector('output')!;
+      input.addEventListener('input', () => {
+        lighting.set(def.key, Number(input.value));
+        out.textContent = input.value;
+      });
+      inputs.set(def.key, { input, out });
+      box.appendChild(row);
+    }
+    sync();
+    this.root.querySelector('.light-reset')!.addEventListener('click', () => {
+      lighting.reset();
+      sync();
+    });
+    const copyBtn = this.root.querySelector<HTMLButtonElement>('.light-copy')!;
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(lighting.settings));
+        copyBtn.textContent = '已複製';
+      } catch {
+        copyBtn.textContent = '複製失敗';
+      }
+      setTimeout(() => (copyBtn.textContent = '複製設定'), 1500);
+    });
   }
 
   /** 由外部加上的動作按鈕 */

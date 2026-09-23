@@ -24,12 +24,14 @@ export interface StateDef {
   priority: number;
   /** 進入時的伴隨手勢 */
   enterGesture?: Gesture;
+  /** 手指做打字動作 */
+  typing?: boolean;
 }
 
 /** 右手托下巴（思考） */
 const CHIN_R = { upper: [-0.18, -0.86, 0.48] as [number, number, number], fore: [0.48, 0.84, 0.3] as [number, number, number], twist: 0.4, hand: [0.1, 0.4, 0.5] as [number, number, number] };
-/** 手在身前（打字/操作） */
-const WORK_L = { upper: [0.28, -0.88, 0.38] as [number, number, number], fore: [0.08, -0.08, 1] as [number, number, number], hand: [0.2, 0, -0.1] as [number, number, number] };
+/** 手在身前打字：前臂水平往前、兩手間隔約一掌寬；手腕繞前臂轉 1.15 rad 讓掌心朝正下方（手指動作由 typing 驅動） */
+const WORK_L = { upper: [0.22, -0.9, 0.36] as [number, number, number], fore: [-0.22, 0.02, 0.97] as [number, number, number], hand: [1.15, 0.15, 0.05] as [number, number, number] };
 /**
  * 雙手在身前相疊（等待）：左手在下、右手疊在上面且稍微往前，手背朝外。
  * 不能左右對稱——對稱時兩手在同一平面，手指會互相穿插。
@@ -104,6 +106,7 @@ export const STATE_DEFS: Record<AvatarState, StateDef> = {
     blinkRate: 0.6,
     minDwell: 1200,
     priority: 1,
+    typing: true,
   },
   speaking: {
     label: '說話',

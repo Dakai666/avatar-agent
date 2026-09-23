@@ -20,6 +20,14 @@ import { RELAXED, TORSO_BONES, armToQuats, eulerToQuat, type Pose, type TorsoBon
 
 const FINGERS = ['Index', 'Middle', 'Ring', 'Little'] as const;
 const SEGMENTS = ['Proximal', 'Intermediate', 'Distal'] as const;
+type Side = 'left' | 'right';
+
+/** 打字時手指懸在鍵盤上的額外彎曲（依指節） */
+const TYPING_HOVER = [0.28, 0.32, 0.12];
+/** 按鍵時的額外彎曲（依指節） */
+const TAP_CURL = [0.38, 0.22, 0.08];
+/** 各手指被選中按鍵的機率權重（食指、中指最常用） */
+const TAP_WEIGHT = [0.38, 0.3, 0.2, 0.12];
 
 /** 各骨頭狀態層的反應速度：下盤穩、上身慢、頭較快、手臂居中 */
 const HALFLIFE: Partial<Record<string, number>> = {
@@ -60,6 +68,17 @@ export class BodyController {
   /** idle 雜訊的相位：以積分累加，速度改變時相位仍連續（不可用 clock × 速度） */
   private noisePhase = 0;
   private breathPhase = 0;
+  private fingerNodes: Record<Side, (THREE.Object3D | null)[][]> = { left: [], right: [] };
+  /** 每根手指的按鍵彈簧（0 = 懸空、1 = 按下）：按鍵只是短暫把目標推到 1 再放回 0 */
+  private taps: Record<Side, Spring[]> = {
+    left: FINGERS.map(() => new Spring(0, 0.035)),
+    right: FINGERS.map(() => new Spring(0, 0.035)),
+  };
+  private tapRelease: Record<Side, number[]> = { left: [0, 0, 0, 0], right: [0, 0, 0, 0] };
+  private nextTap: Record<Side, number> = { left: 0, right: 0.12 };
+
+  /** 打字權重（0~1）：由狀態設定目標，手指與手腕的打字動作都乘上它 */
+  readonly typing = new Spring(0, 0.25);
 
   /** idle 活躍度：雜訊幅度與速度 */
   readonly energy = new Spring(1, 0.6);
@@ -95,19 +114,56 @@ export class BodyController {
     return this.flip ? -1 : 1;
   }
 
-  /** 手指自然微彎（靜態，不需要動畫） */
+  /** 收集手指骨；大拇指是靜態的自然微彎 */
   private relaxFingers(): void {
     for (const side of ['left', 'right'] as const) {
       const sign = side === 'left' ? -1 : 1;
-      FINGERS.forEach((f, fi) => {
-        SEGMENTS.forEach((seg, si) => {
-          const node = this.vrm.humanoid.getNormalizedBoneNode(`${side}${f}${seg}` as VRMHumanBoneName);
-          if (node) node.rotation.set(0, 0, this.axisSign * sign * (0.18 + si * 0.1 + fi * 0.04));
-        });
-      });
+      this.fingerNodes[side] = FINGERS.map((f) =>
+        SEGMENTS.map((seg) => this.vrm.humanoid.getNormalizedBoneNode(`${side}${f}${seg}` as VRMHumanBoneName)),
+      );
       const thumb = this.vrm.humanoid.getNormalizedBoneNode(`${side}ThumbProximal` as VRMHumanBoneName);
       if (thumb) thumb.rotation.set(0, sign * -0.25, this.axisSign * sign * 0.1);
     }
+    this.updateFingers(0);
+  }
+
+  /** 手指彎曲 = 自然微彎 + 打字懸空 + 按鍵；全部來自彈簧輸出 */
+  private updateFingers(dt: number): void {
+    const typing = this.typing.x;
+    for (const side of ['left', 'right'] as const) {
+      const sign = side === 'left' ? -1 : 1;
+      const taps = this.taps[side];
+      const release = this.tapRelease[side];
+      // 排程下一次按鍵（只在打字時）；每次按下約 70ms 後放開
+      this.nextTap[side] -= dt;
+      if (this.typing.target > 0 && this.nextTap[side] <= 0) {
+        let r = Math.random();
+        let fi = 0;
+        while (fi < TAP_WEIGHT.length - 1 && r > TAP_WEIGHT[fi]) r -= TAP_WEIGHT[fi++];
+        taps[fi].target = 1;
+        release[fi] = 0.06 + Math.random() * 0.04;
+        this.nextTap[side] = 0.09 + Math.random() * 0.22 + (Math.random() < 0.12 ? 0.4 : 0);
+      }
+      FINGERS.forEach((_, fi) => {
+        if (release[fi] > 0) {
+          release[fi] -= dt;
+          if (release[fi] <= 0) taps[fi].target = 0;
+        }
+        const tap = taps[fi].update(dt) * typing;
+        this.fingerNodes[side][fi]?.forEach((node, si) => {
+          if (!node) return;
+          const curl = 0.18 + si * 0.1 + fi * 0.04 + typing * TYPING_HOVER[si] + tap * TAP_CURL[si];
+          node.rotation.set(0, 0, this.axisSign * sign * curl);
+        });
+      });
+    }
+  }
+
+  /** 按鍵活動量（0~1）：讓手腕跟著手指輕微起伏 */
+  private tapActivity(side: Side): number {
+    let a = 0;
+    for (const t of this.taps[side]) a = Math.max(a, t.x);
+    return a * this.typing.x;
   }
 
   /** 設定狀態姿勢（只改彈簧目標） */
@@ -169,6 +225,8 @@ export class BodyController {
 
     // --- 狀態層 ---
     for (const s of this.springs.values()) s.update(dt);
+    const typing = this.typing.update(dt);
+    this.updateFingers(dt);
 
     const q = new THREE.Quaternion();
     const tmp = new THREE.Quaternion();
@@ -191,6 +249,9 @@ export class BodyController {
       rightShoulder: [0, 0, -breathIn * 0.018],
       leftUpperArm: [n(12, 0.015), 0, n(13, 0.012)],
       rightUpperArm: [n(14, 0.015), 0, n(15, 0.012)],
+      // 打字：手腕隨按鍵輕壓，加上在鍵盤上小幅游移
+      leftHand: [0, n(16, 0.06) * typing, (-this.tapActivity('left') * 0.05 + n(17, 0.03)) * typing],
+      rightHand: [0, n(18, 0.06) * typing, (this.tapActivity('right') * 0.05 + n(19, 0.03)) * typing],
     };
 
     // 視線分配到身體

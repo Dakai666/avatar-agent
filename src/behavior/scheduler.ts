@@ -127,6 +127,7 @@ export class IntentScheduler {
     this.body.setPose(def.pose);
     this.body.energy.target = def.energy;
     this.body.breathRate.target = def.breath;
+    this.body.typing.target = def.typing ? 1 : 0;
     this.face.bias = def.face;
     if (this.now >= this.emotionUntil) this.face.setEmotion(def.emotion.emotion, def.emotion.intensity);
     this.face.blink.rate = def.blinkRate;

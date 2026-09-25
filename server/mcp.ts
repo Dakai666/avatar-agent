@@ -2,7 +2,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { AvatarLink } from './link.ts';
-import { zEmotion, zGaze, zGesture, zState } from './schema.ts';
+import { resolve } from 'node:path';
+import { zEmotion, zGaze, zGesture, zScene, zState } from './schema.ts';
+import { listSceneImages, sceneImagePath } from './sceneFiles.ts';
 
 /**
  * Avatar MCP server（stdio）。
@@ -10,6 +12,7 @@ import { zEmotion, zGaze, zGesture, zState } from './schema.ts';
  */
 
 const SPEAKER = process.env.AVATAR_NAME || 'Agent';
+const ROOT = resolve(import.meta.dirname, '..');
 const link = new AvatarLink();
 await link.start();
 
@@ -133,6 +136,35 @@ server.registerTool(
           ? `使用者在 ${timeout_sec} 秒內沒有回應，請改在對話中詢問。`
           : `提問失敗：${r.detail ?? '未知原因'}，請改在對話中詢問。`;
     return text(why);
+  },
+);
+
+server.registerTool(
+  'avatar_set_scene',
+  {
+    title: 'Avatar: set scene',
+    description:
+      'Change the background behind the avatar (cross-fades, the avatar keeps moving). ' +
+      'default = soft gradient; greenscreen = solid green for chroma key; transparent = see-through page for OBS; ' +
+      'room / roomNight = built-in 3D room; image = a picture from the project scenes/ folder (pass its file name). ' +
+      'Only change the scene when the user asks or it clearly fits the moment.',
+    inputSchema: {
+      scene: zScene,
+      image: z.string().max(120).optional().describe('File name inside scenes/, required when scene is "image"'),
+    },
+  },
+  async ({ scene, image }) => {
+    if (scene === 'image') {
+      const available = listSceneImages(ROOT);
+      if (!image || !sceneImagePath(ROOT, image)) {
+        const list = available.length ? available.join(', ') : '（scenes/ 資料夾目前沒有圖片）';
+        return { ...text(`找不到背景圖「${image ?? ''}」。可用的圖片：${list}`), isError: true };
+      }
+      link.send({ type: 'scene', scene, image });
+    } else {
+      link.send({ type: 'scene', scene });
+    }
+    return text(`場景 → ${scene}${image && scene === 'image' ? `（${image}）` : ''}${noPageNote()}`);
   },
 );
 

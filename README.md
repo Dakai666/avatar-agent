@@ -58,7 +58,8 @@ Claude Code ──stdio──▶ server/mcp.ts ──┐
 |---|---|
 | `avatar_say` | 說一句話（對話框 + 嘴型），可附情緒、手勢；不阻塞 |
 | `avatar_set_state` | 切換狀態（hooks 推不出來的，如 happy / troubled） |
-| `avatar_express` | 情緒 / 手勢 / 視線 |
+| `avatar_express` | 情緒 / 手勢 / 視線；`fade_ms` 控制情緒混合時間（0 = 驟變、1500 = 慢慢變） |
+| `avatar_set_scene` | 切換背景場景（見下方「場景」） |
 | `avatar_ask` | 在對話框顯示選項與輸入框，**阻塞直到使用者回答**或逾時 |
 | `avatar_status` | 頁面是否開啟、網址 |
 
@@ -119,6 +120,19 @@ hooks:
 | on_session_end | 閒置；未完成且非中斷 → 困擾 |
 
 注意：Hermes 的 shell hook 是**同步**的（沒有 async 選項），每次約 0.1 秒；第一次執行每個 hook 時 Hermes 會要求確認一次。
+
+### 場景
+
+| 場景 | 說明 |
+|---|---|
+| `default` | 漸層背景 + 光暈 |
+| `greenscreen` | 純綠 `#00ff00`，給 OBS 色鍵去背 |
+| `transparent` | 整頁透明，OBS 瀏覽器來源直接疊加 |
+| `image` | 專案 `scenes/` 資料夾內的圖片（png/jpg/webp，只能指定檔名） |
+| `room` / `roomNight` | 內建 3D 房間（程序產生，不需要素材） |
+
+切換時交叉淡化，角色不受影響；每個場景可帶光線微調（疊加在滑桿設定之上、不存檔）。
+除錯面板「場景」可手動切換，按 H 可隱藏面板。`scenes/` 內的圖片不進版控。
 
 ### 多 session
 

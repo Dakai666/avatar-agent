@@ -1,4 +1,4 @@
-import { EMOTIONS, GAZE_TARGETS, GESTURES, STATES, type AvatarCommand } from '../protocol';
+import { EMOTIONS, GAZE_TARGETS, GESTURES, SCENES, STATES, type AvatarCommand } from '../protocol';
 import { STATE_DEFS } from '../behavior/states';
 import type { IntentScheduler, LogEntry } from '../behavior/scheduler';
 import { smoothing } from '../core/spring';
@@ -22,6 +22,9 @@ const EMOTION_LABEL: Record<string, string> = {
 };
 const GESTURE_LABEL: Record<string, string> = {
   nod: '點頭', shake: '搖頭', tilt: '歪頭', wave: '揮手', bounce: '雀躍', sigh: '嘆氣', lookAround: '張望', pointDialog: '比對話框',
+};
+const SCENE_LABEL: Record<string, string> = {
+  default: '預設', greenscreen: '綠幕', transparent: '透明', room: '房間', roomNight: '夜晚房間',
 };
 const GAZE_LABEL: Record<string, string> = {
   user: '看使用者', down: '往下讀', thinkUp: '往上想', side: '看側邊', dialog: '看對話框', wander: '游移',
@@ -54,6 +57,9 @@ export class DebugPanel {
           <label><input type="checkbox" class="smooth" checked> 彈簧平滑</label>
           <label><input type="checkbox" class="sched" checked> 意圖排程器</label>
         </section>
+        <section class="scenes"><h3>場景</h3><div class="btns" data-group="scene"></div>
+          <div class="say-row"><select class="scene-image"><option value="">（scenes/ 資料夾的圖片）</option></select><button class="scene-image-btn">套用</button></div>
+        </section>
         <section class="lighting"><h3>光線</h3><div class="sliders"></div>
           <div class="btns"><button class="light-reset">重設</button><button class="light-copy">複製設定</button></div>
         </section>
@@ -76,6 +82,25 @@ export class DebugPanel {
     for (const e of EMOTIONS) btn(group('emotion'), EMOTION_LABEL[e], () => ({ type: 'emotion', emotion: e, intensity: 0.85 }));
     for (const g of GESTURES) btn(group('gesture'), GESTURE_LABEL[g], () => ({ type: 'gesture', gesture: g }));
     for (const g of GAZE_TARGETS) btn(group('gaze'), GAZE_LABEL[g], () => ({ type: 'gaze', target: g, holdMs: 2500 }));
+    for (const s of SCENES) if (s !== 'image') btn(group('scene'), SCENE_LABEL[s], () => ({ type: 'scene', scene: s }));
+    const imageSel = this.root.querySelector<HTMLSelectElement>('.scene-image')!;
+    // 每次打開選單都重新讀清單：使用者可能剛把圖片放進資料夾
+    const refreshImages = async () => {
+      try {
+        const { images } = (await (await fetch('/scenes/list.json')).json()) as { images: string[] };
+        const keep = imageSel.value;
+        imageSel.length = 1;
+        for (const name of images) imageSel.add(new Option(name, name));
+        imageSel.value = images.includes(keep) ? keep : '';
+      } catch {
+        /* hub 未提供清單時略過 */
+      }
+    };
+    imageSel.addEventListener('focus', refreshImages);
+    void refreshImages();
+    this.root.querySelector('.scene-image-btn')!.addEventListener('click', () => {
+      if (imageSel.value) this.sched.send({ type: 'scene', scene: 'image', image: imageSel.value });
+    });
     SAMPLE_LINES.forEach((line, i) =>
       btn(group('lines'), `台詞 ${i + 1}`, () => ({ type: 'say', text: line, name: 'Agent' })),
     );

@@ -24,11 +24,15 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; }
+/* 頁面本身只有底色；漸層、綠幕、圖片等背景都由 .backdrop 層畫（場景切換時交叉淡化） */
+html { background: var(--bg-bottom); }
+html.bg-transparent { background: transparent; }
 body {
   font: 14px/1.5 system-ui, 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
   color: var(--text);
-  background: linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+  background: transparent;
 }
+.backdrop { position: absolute; inset: 0; pointer-events: none; }
 #app { position: fixed; inset: 0; }
 #stage { position: relative; width: 100%; height: 100%; display: block; }
 .stage-glow { position: absolute; inset: 0; pointer-events: none; }
@@ -95,6 +99,7 @@ body {
 }
 .debug button:hover { border-color: var(--accent); color: var(--accent); }
 .debug label { display: block; margin: 3px 0; cursor: pointer; }
+.debug .scene-image { flex: 1; min-width: 0; font: inherit; color: var(--text); background: transparent; border: 1px solid var(--panel-border); border-radius: 6px; padding: 3px 4px; }
 .debug .slider-row { display: grid; grid-template-columns: 72px 1fr 36px; align-items: center; gap: 6px; font-size: 12px; }
 .debug .slider-row input { width: 100%; margin: 0; accent-color: var(--accent); }
 .debug .slider-row output { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }

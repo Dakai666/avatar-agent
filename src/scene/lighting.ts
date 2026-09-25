@@ -11,6 +11,8 @@ import * as THREE from 'three';
  *
  * 角度慣例：方位角 0° = 從相機方向照、正值往畫面右；仰角 = 由下往上幾度。
  * 色溫：-1 偏冷（藍）~ 0 白 ~ 1 偏暖（橙）。
+ *
+ * 實際套用的數值 = 使用者設定（滑桿、存在瀏覽器）疊上場景的暫時覆寫，並平滑過渡，換場景時不會一下跳亮/跳暗。
  */
 
 export interface LightSettings {
@@ -96,7 +98,12 @@ export class Lighting {
   readonly key = new THREE.DirectionalLight();
   readonly ambient = new THREE.AmbientLight();
   private rimMaterials: RimOriginal[] = [];
+  /** 使用者設定（滑桿） */
   settings: LightSettings;
+  /** 場景帶來的暫時覆寫（不存檔） */
+  private sceneOverride: Partial<LightSettings> = {};
+  /** 目前實際套用的值：每幀往目標靠近 */
+  private shown: LightSettings;
   private color = new THREE.Color();
 
   constructor(
@@ -105,7 +112,8 @@ export class Lighting {
   ) {
     scene.add(this.key, this.ambient);
     this.settings = { ...LIGHT_DEFAULTS, ...this.load() };
-    this.apply();
+    this.shown = { ...this.settings };
+    this.apply(this.shown);
   }
 
   /** 模型載入後呼叫：記下各 MToon 材質原本的邊緣光設定，之後疊加在上面 */
@@ -126,18 +134,34 @@ export class Lighting {
         });
       }
     });
-    this.apply();
+    this.apply(this.shown);
   }
 
   set<K extends keyof LightSettings>(k: K, v: LightSettings[K]): void {
     this.settings[k] = v;
-    this.apply();
     this.save();
+  }
+
+  setSceneOverride(o: Partial<LightSettings>): void {
+    this.sceneOverride = o;
+  }
+
+  /** 每幀呼叫：實際值以約 0.25 秒的時間常數靠近目標 */
+  update(dt: number): void {
+    const target = { ...this.settings, ...this.sceneOverride };
+    const k = 1 - Math.exp(-dt / 0.25);
+    let changed = false;
+    for (const key of Object.keys(target) as (keyof LightSettings)[]) {
+      const d = target[key] - this.shown[key];
+      if (Math.abs(d) < 1e-4) continue;
+      this.shown[key] = Math.abs(d) < 1e-3 ? target[key] : this.shown[key] + d * k;
+      changed = true;
+    }
+    if (changed) this.apply(this.shown);
   }
 
   reset(): void {
     this.settings = { ...LIGHT_DEFAULTS };
-    this.apply();
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -145,8 +169,7 @@ export class Lighting {
     }
   }
 
-  private apply(): void {
-    const s = this.settings;
+  private apply(s: LightSettings): void {
     this.key.intensity = s.keyIntensity;
     this.key.color.copy(warmthColor(s.keyWarmth, this.color));
     placeLight(this.key, s.keyAzimuth, s.keyElevation);

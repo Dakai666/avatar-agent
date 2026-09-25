@@ -13,6 +13,7 @@ import { makeContinuityTest } from './dev/continuityTest';
 import { Bridge } from './net/bridge';
 import { AskFlow } from './behavior/ask';
 import { Lighting } from './scene/lighting';
+import { Backdrop } from './scene/backdrop';
 
 const app = document.getElementById('app')!;
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
@@ -35,6 +36,7 @@ const glowEl = document.createElement('div');
 glowEl.className = 'stage-glow';
 app.insertBefore(glowEl, canvas);
 const lighting = new Lighting(scene, glowEl);
+const backdrop = new Backdrop(app, glowEl, scene, lighting);
 
 function resize(): void {
   const w = app.clientWidth;
@@ -102,6 +104,7 @@ async function main(): Promise<void> {
 
   const dialog = new DialogBox(app, () => sched.skipSpeech());
   sched.onDialog = (d) => dialog.update(d);
+  sched.onScene = (cmd) => void backdrop.set(cmd.scene, cmd.image);
   const debug = new DebugPanel(app, sched);
   debug.addLighting(lighting);
   if (window.innerWidth < 900) debug.collapse();
@@ -156,6 +159,8 @@ async function main(): Promise<void> {
     gaze.update(dt);
     body.update(dt);
     face.update(dt);
+    lighting.update(dt);
+    backdrop.update(dt);
     vrm.lookAt!.yaw = THREE.MathUtils.radToDeg(gaze.eyeYaw.x);
     vrm.lookAt!.pitch = THREE.MathUtils.radToDeg(gaze.eyePitch.x);
     vrm.update(dt);
@@ -169,7 +174,7 @@ async function main(): Promise<void> {
     for (let i = 0; i < Math.round(seconds * fpsStep); i++) frame(1 / fpsStep);
   };
   const continuityTest = makeContinuityTest(vrm, sched, step);
-  Object.assign(window, { __avatar: { vrm, face, gaze, body, sched, camera, step, smoothing, continuityTest, bridge, askFlow, lighting } });
+  Object.assign(window, { __avatar: { vrm, face, gaze, body, sched, camera, step, smoothing, continuityTest, bridge, askFlow, lighting, backdrop } });
 
   const timer = new THREE.Timer();
   timer.connect(document);

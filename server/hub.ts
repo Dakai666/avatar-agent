@@ -15,6 +15,7 @@ import {
 } from '../src/bridgeProtocol.ts';
 import { mapHook, type HookPayload } from './hookMap.ts';
 import { parseCommand } from './schema.ts';
+import { listSceneImages, sceneImageMime, sceneImagePath } from './sceneFiles.ts';
 
 /**
  * Hub：本機唯一的 avatar 中樞（第一個搶到 port 的 MCP 行程擔任）。
@@ -24,6 +25,7 @@ import { parseCommand } from './schema.ts';
  *   POST /hook      Claude Code hook 原始 payload（由 hub 對應成指令）
  *   POST /cmd       任意 agent 直接送 AvatarCommand
  *   GET  /status    連線狀態
+ *   GET  /scenes/…  自訂背景圖（只限專案 scenes/ 資料夾；list.json 列出可用檔名）
  *   其他            提供打包後的頁面（dist/）與本機模型
  */
 
@@ -246,6 +248,20 @@ export class Hub {
       if (url.pathname === '/status') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ pages: this.pages.size, agents: this.agents.size, pendingAsks: this.pending.size }));
+        return;
+      }
+      if (url.pathname === '/scenes/list.json') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ images: listSceneImages(ROOT) }));
+        return;
+      }
+      if (url.pathname.startsWith('/scenes/')) {
+        const file = sceneImagePath(ROOT, decodeURIComponent(url.pathname.slice('/scenes/'.length)));
+        if (!file) {
+          res.writeHead(404).end();
+          return;
+        }
+        this.serveFile(res, file, sceneImageMime(file));
         return;
       }
       if (url.pathname === '/avatar/model.vrm') {

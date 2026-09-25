@@ -47,6 +47,8 @@ export class IntentScheduler {
   readonly log: LogEntry[] = [];
   onLog?: (e: LogEntry) => void;
   onDialog?: (d: { name: string; text: string; revealed: number; speaking: boolean } | null) => void;
+  /** 場景指令與角色無關，交給背景管理（main.ts 接上） */
+  onScene?: (cmd: Extract<AvatarCommand, { type: 'scene' }>) => void;
   private dialogName = '';
 
   constructor(
@@ -113,6 +115,10 @@ export class IntentScheduler {
           return;
         }
         this.beginSpeech(cmd);
+        return;
+      case 'scene':
+        this.onScene?.(cmd);
+        this.emit('apply', `場景 ${cmd.scene}${cmd.image ? ` (${cmd.image})` : ''}`);
         return;
     }
   }
@@ -268,5 +274,7 @@ function describe(cmd: AvatarCommand): string {
       return `gaze:${cmd.target}`;
     case 'say':
       return `say:「${cmd.text.slice(0, 12)}${cmd.text.length > 12 ? '…' : ''}」`;
+    case 'scene':
+      return `scene:${cmd.scene}`;
   }
 }

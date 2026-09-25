@@ -29,9 +29,23 @@ export type Gesture = (typeof GESTURES)[number];
 export const GAZE_TARGETS = ['user', 'down', 'thinkUp', 'side', 'dialog', 'wander'] as const;
 export type GazeTarget = (typeof GAZE_TARGETS)[number];
 
+export const SCENES = [
+  'default', // 漸層背景 + 光暈
+  'greenscreen', // 綠幕（OBS 色鍵去背）
+  'transparent', // 透明背景（OBS 瀏覽器來源）
+  'image', // 2D 背景圖（專案 scenes/ 資料夾內的圖片）
+  'room', // 內建 3D 房間（白天）
+  'roomNight', // 內建 3D 房間（夜晚）
+] as const;
+export type SceneName = (typeof SCENES)[number];
+
+/** scenes/ 資料夾內的圖片檔名：不含路徑、限定副檔名 */
+export const SCENE_IMAGE_NAME = /^[\w\-. ]{1,100}\.(png|jpe?g|webp)$/i;
+
 export type AvatarCommand =
   | { type: 'state'; state: AvatarState; reason?: string }
   | { type: 'emotion'; emotion: Emotion; intensity?: number; holdMs?: number; fadeMs?: number }
   | { type: 'gesture'; gesture: Gesture }
   | { type: 'gaze'; target: GazeTarget; holdMs?: number }
-  | { type: 'say'; text: string; emotion?: Emotion; name?: string };
+  | { type: 'say'; text: string; emotion?: Emotion; name?: string }
+  | { type: 'scene'; scene: SceneName; image?: string };

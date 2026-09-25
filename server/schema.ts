@@ -17,6 +17,7 @@ export const zCommand = z.discriminatedUnion('type', [
     emotion: zEmotion,
     intensity: z.number().min(0).max(1).optional(),
     holdMs: z.number().int().min(0).max(60_000).optional(),
+    fadeMs: z.number().int().min(0).max(10_000).optional(),
   }),
   z.object({ type: z.literal('gesture'), gesture: zGesture }),
   z.object({ type: z.literal('gaze'), target: zGaze, holdMs: z.number().int().min(0).max(60_000).optional() }),

@@ -24,6 +24,11 @@ export interface GestureDef {
 
 type Keys = [number, number][];
 
+/** 比向對話框的右手：上臂往前下、前臂往身前中央、前臂翻轉讓掌心朝上（push = 手腕往前送） */
+function POINT_DIALOG_R(push: number): ArmPose {
+  return { upper: [-0.26, -0.78, 0.57], fore: [0.5, -0.22, 0.84], foreTwist: 2.1, hand: [0, 0, 0.15 + push] };
+}
+
 /** Catmull-Rom 插值：通過每個關鍵點且速度連續 */
 function curve(keys: Keys, t: number): number {
   if (t <= keys[0][0]) return keys[0][1];
@@ -126,6 +131,19 @@ export const GESTURE_DEFS: Record<Exclude<Gesture, 'lookAround'>, GestureDef> = 
           pose: { upper: [-0.82, -0.28, 0.45], fore: [fx, fy, 0.25], hand: [0, 0, 0] },
         },
         euler: { head: [0, -0.06 * w, 0.06 * w], upperChest: [0, -0.04 * w, 0.03 * w] },
+      };
+    },
+  },
+  pointDialog: {
+    // 右手掌心朝上、往身前下方（對話框）一比，停一下再收回；視線由排程器帶去看對話框
+    duration: 2.2,
+    sample: (t) => {
+      const w = envelope(t, 2.2, 0.35, 0.55);
+      // 到位時手腕帶一點「請看這裡」的小推送
+      const push = curve([[0, 0], [0.35, 0], [0.55, 0.12], [0.8, 0], [2.2, 0]], t);
+      return {
+        right: { weight: w, pose: POINT_DIALOG_R(push) },
+        euler: { head: [0.07 * w, -0.05 * w, 0.04 * w], upperChest: [0.02 * w, -0.05 * w, 0] },
       };
     },
   },

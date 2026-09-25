@@ -37,6 +37,7 @@ export class AskFlow {
     this.current = ask;
     // say 先、state 後：說話期間收到的狀態會在唸完後套用 → 唸完進入「等待回應」
     this.sched.send({ type: 'say', text: ask.question, name: ask.name });
+    this.sched.send({ type: 'gesture', gesture: 'pointDialog' }); // 邊問邊比向對話框的選項
     this.sched.send({ type: 'state', state: 'waiting', reason: 'ask' });
     this.dialog.showChoices({
       id: ask.id,

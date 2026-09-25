@@ -79,6 +79,10 @@ export class BodyController {
 
   /** 打字權重（0~1）：由狀態設定目標，手指與手腕的打字動作都乘上它 */
   readonly typing = new Spring(0, 0.25);
+  /** 說話中（0~1）：頭部隨說話輕微擺動 */
+  readonly speaking = new Spring(0, 0.3);
+  /** 目前發聲強度（母音總和，0~1）：重音時頭微微下點 */
+  readonly voice = new Spring(0, 0.12);
 
   /** idle 活躍度：雜訊幅度與速度 */
   readonly energy = new Spring(1, 0.6);
@@ -226,6 +230,8 @@ export class BodyController {
     // --- 狀態層 ---
     for (const s of this.springs.values()) s.update(dt);
     const typing = this.typing.update(dt);
+    const speaking = this.speaking.update(dt);
+    const voice = this.voice.update(dt);
     this.updateFingers(dt);
 
     const q = new THREE.Quaternion();
@@ -243,8 +249,9 @@ export class BodyController {
       spine: [n(3, 0.01), n(4, 0.012), n(5, 0.012)],
       chest: [-breath * 0.012, 0, 0],
       upperChest: [-breath * 0.01, 0, 0],
-      neck: [n(6, 0.012), n(7, 0.015), n(8, 0.01)],
-      head: [n(9, 0.02), n(10, 0.025), n(11, 0.018)],
+      // 說話：低頻的左右/歪頭擺動 + 隨發聲強度輕點頭
+      neck: [n(6, 0.012) + voice * 0.02, n(7, 0.015) + n(21, 0.05) * speaking, n(8, 0.01)],
+      head: [n(9, 0.02) + n(20, 0.06) * speaking + voice * 0.05, n(10, 0.025) + n(22, 0.11) * speaking, n(11, 0.018) + n(23, 0.07) * speaking],
       leftShoulder: [0, 0, breathIn * 0.018],
       rightShoulder: [0, 0, -breathIn * 0.018],
       leftUpperArm: [n(12, 0.015), 0, n(13, 0.012)],
@@ -265,7 +272,7 @@ export class BodyController {
     // 手勢疊加（加權）
     const gEuler: Record<string, Vec3> = {};
     // 手臂覆寫依序 slerp 疊上去（不是取最大權重：權重交叉時會跳）
-    const armOverride: Record<'left' | 'right', { up: THREE.Quaternion; lo: THREE.Quaternion; w: number }[]> = {
+    const armOverride: Record<'left' | 'right', { up: THREE.Quaternion; lo: THREE.Quaternion; hand: THREE.Quaternion; w: number }[]> = {
       left: [],
       right: [],
     };
@@ -285,17 +292,19 @@ export class BodyController {
         const up = new THREE.Quaternion();
         const lo = new THREE.Quaternion();
         armToQuats(side, a.pose, up, lo);
-        armOverride[side].push({ up, lo, w: a.weight * w });
+        const hand = eulerToQuat(a.pose.hand, new THREE.Quaternion());
+        armOverride[side].push({ up, lo, hand, w: a.weight * w });
       }
     }
 
     for (const [name, node] of this.nodes) {
       q.copy(this.springs.get(name)!.x);
-      // 手臂覆寫：與狀態姿勢 slerp
+      // 手臂覆寫（上臂、前臂、手腕）：與狀態姿勢 slerp
       const side = name.startsWith('left') ? 'left' : name.startsWith('right') ? 'right' : null;
-      if (side && (name.endsWith('UpperArm') || name.endsWith('LowerArm'))) {
+      const part = name.endsWith('UpperArm') ? 'up' : name.endsWith('LowerArm') ? 'lo' : name.endsWith('Hand') ? 'hand' : null;
+      if (side && part) {
         for (const o of armOverride[side]) {
-          if (o.w > 0) q.slerp(name.endsWith('UpperArm') ? o.up : o.lo, Math.min(1, o.w));
+          if (o.w > 0) q.slerp(o[part], Math.min(1, o.w));
         }
       }
       for (const layer of [gazeRot[name], gEuler[name], idle[name]]) {

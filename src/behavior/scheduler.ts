@@ -87,7 +87,7 @@ export class IntentScheduler {
         this.pending = { state: cmd.state, at: this.now, firstAt: this.pending?.firstAt ?? this.now };
         return;
       case 'emotion':
-        this.face.setEmotion(cmd.emotion, cmd.intensity ?? 0.8);
+        this.face.setEmotion(cmd.emotion, cmd.intensity ?? 0.8, cmd.fadeMs);
         this.emotionUntil = this.now + (cmd.holdMs ?? 2500);
         this.speechEmotion = false; // 明確指定的情緒優先於 say 的情緒，照自己的 holdMs 衰減
         this.emit('apply', `情緒 ${cmd.emotion}`);
@@ -122,6 +122,10 @@ export class IntentScheduler {
       this.gaze.setOverride('wander', 2600);
       this.gaze.energy = 1.6;
       setTimeout(() => (this.gaze.energy = 1), 2600);
+    } else if (g === 'pointDialog') {
+      // 手比過去時眼睛也看一下對話框，之後回到原本的視線
+      this.gaze.setOverride('dialog', 1100);
+      this.body.playGesture(g);
     } else {
       this.body.playGesture(g);
     }
@@ -185,9 +189,13 @@ export class IntentScheduler {
       this.speechPhase = 'talk';
     }
     this.speech.update(dtSec);
+    let voice = 0;
     for (const k of Object.keys(this.face.vowels) as (keyof typeof this.face.vowels)[]) {
       this.face.vowels[k] = this.speech.vowels[k];
+      voice += this.speech.vowels[k];
     }
+    this.body.voice.target = Math.min(1, voice);
+    this.body.speaking.target = this.speechPhase === 'talk' ? 1 : 0;
     if (this.speechPhase === 'talk' || this.speechPhase === 'prep') {
       this.onDialog?.({ name: this.dialogName, text: this.speech.text, revealed: this.speech.revealed, speaking: true });
       if (this.speechPhase === 'talk' && !this.speech.playing) {

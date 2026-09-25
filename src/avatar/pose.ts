@@ -31,6 +31,11 @@ export interface ArmPose {
   fore: Vec3;
   /** 上臂繞自身軸的扭轉（弧度），用來調整手肘朝向 */
   twist?: number;
+  /**
+   * 前臂繞自身軸的扭轉（弧度）：掌心翻上/翻下用這個，不要只靠手腕大角度 roll——
+   * 手腕覆寫與狀態姿勢相差超過 180° 時，slerp 的最短路徑會突然換邊，手腕瞬間翻轉。
+   */
+  foreTwist?: number;
   /** 手腕 euler */
   hand?: Vec3;
 }
@@ -47,6 +52,7 @@ export function mirrorArm(a: ArmPose): ArmPose {
     upper: [-a.upper[0], a.upper[1], a.upper[2]],
     fore: [-a.fore[0], a.fore[1], a.fore[2]],
     twist: a.twist !== undefined ? -a.twist : undefined,
+    foreTwist: a.foreTwist !== undefined ? -a.foreTwist : undefined,
     hand: a.hand ? [a.hand[0], -a.hand[1], -a.hand[2]] : undefined,
   };
 }
@@ -89,6 +95,7 @@ export function armToQuats(
   }
   // 前臂的世界（肩膀空間）旋轉 = 從上臂的朝向再轉到 d2；取局部 = inv(upper) * world
   const world = new THREE.Quaternion().setFromUnitVectors(_d1, _d2).multiply(outUpper);
+  if (arm.foreTwist) world.premultiply(_qTwist.setFromAxisAngle(_d2, arm.foreTwist));
   outLower.copy(_qInv.copy(outUpper).invert().multiply(world));
 }
 

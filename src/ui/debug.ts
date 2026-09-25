@@ -21,7 +21,7 @@ const EMOTION_LABEL: Record<string, string> = {
   neutral: '平靜', joy: '開心', fun: '愉快', angry: '生氣', sorrow: '難過', surprised: '驚訝',
 };
 const GESTURE_LABEL: Record<string, string> = {
-  nod: '點頭', shake: '搖頭', tilt: '歪頭', wave: '揮手', bounce: '雀躍', sigh: '嘆氣', lookAround: '張望',
+  nod: '點頭', shake: '搖頭', tilt: '歪頭', wave: '揮手', bounce: '雀躍', sigh: '嘆氣', lookAround: '張望', pointDialog: '比對話框',
 };
 const GAZE_LABEL: Record<string, string> = {
   user: '看使用者', down: '往下讀', thinkUp: '往上想', side: '看側邊', dialog: '看對話框', wander: '游移',

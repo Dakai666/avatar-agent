@@ -23,7 +23,7 @@ export type AvatarState = (typeof STATES)[number];
 export const EMOTIONS = ['neutral', 'joy', 'fun', 'angry', 'sorrow', 'surprised'] as const;
 export type Emotion = (typeof EMOTIONS)[number];
 
-export const GESTURES = ['nod', 'shake', 'tilt', 'wave', 'bounce', 'sigh', 'lookAround'] as const;
+export const GESTURES = ['nod', 'shake', 'tilt', 'wave', 'bounce', 'sigh', 'lookAround', 'pointDialog'] as const;
 export type Gesture = (typeof GESTURES)[number];
 
 export const GAZE_TARGETS = ['user', 'down', 'thinkUp', 'side', 'dialog', 'wander'] as const;
@@ -31,7 +31,7 @@ export type GazeTarget = (typeof GAZE_TARGETS)[number];
 
 export type AvatarCommand =
   | { type: 'state'; state: AvatarState; reason?: string }
-  | { type: 'emotion'; emotion: Emotion; intensity?: number; holdMs?: number }
+  | { type: 'emotion'; emotion: Emotion; intensity?: number; holdMs?: number; fadeMs?: number }
   | { type: 'gesture'; gesture: Gesture }
   | { type: 'gaze'; target: GazeTarget; holdMs?: number }
   | { type: 'say'; text: string; emotion?: Emotion; name?: string };

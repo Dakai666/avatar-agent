@@ -31,6 +31,8 @@ export type Vowel = (typeof VOWELS)[number];
 
 /** 區域反應速度（halflife 秒）：眉最快，嘴最慢 */
 const REGION_HALFLIFE: Record<string, number> = { BRW: 0.09, EYE: 0.12, MTH: 0.16 };
+/** 情緒混合的預設 halflife（秒），約 0.5 秒混合完成 */
+const EMOTION_HALFLIFE = 0.18;
 /** 母音通道要快，才對得上音節；但仍有平滑 → 自然的協同發音 */
 const VOWEL_HALFLIFE = 0.045;
 
@@ -122,7 +124,7 @@ export class FaceController {
     }
     for (const e of Object.keys(EMOTION_POSES) as Emotion[]) {
       // 情緒本身也是彈簧：情緒之間是「混合」過去，不是切換
-      this.emotionWeights.set(e, new Spring(0, 0.18));
+      this.emotionWeights.set(e, new Spring(0, EMOTION_HALFLIFE));
     }
   }
 
@@ -130,9 +132,17 @@ export class FaceController {
     return [...this.channels.keys()];
   }
 
-  /** 設定目標情緒；其他情緒自動淡出 */
-  setEmotion(emotion: Emotion, intensity = 1): void {
-    for (const [e, s] of this.emotionWeights) s.target = e === emotion ? clamp(intensity, 0, 1) : 0;
+  /**
+   * 設定目標情緒；其他情緒自動淡出。
+   * fadeMs：大約多久混合完成（≈ 3 個 halflife）；不給用預設。0 也只是「很快」：
+   * 各 morph 通道本身還有彈簧，不會真的瞬間跳。
+   */
+  setEmotion(emotion: Emotion, intensity = 1, fadeMs?: number): void {
+    const halflife = fadeMs === undefined ? EMOTION_HALFLIFE : Math.max(0.02, fadeMs / 1000 / 3);
+    for (const [e, s] of this.emotionWeights) {
+      s.halflife = halflife;
+      s.target = e === emotion ? clamp(intensity, 0, 1) : 0;
+    }
   }
 
   get dominantEmotion(): Emotion {

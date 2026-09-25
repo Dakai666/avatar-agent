@@ -84,11 +84,18 @@ server.registerTool(
       gesture: zGesture.optional(),
       gaze: zGaze.optional().describe('Where to look: user, down, thinkUp, side, dialog, wander'),
       hold_ms: z.number().int().min(200).max(60_000).optional().describe('How long to hold emotion/gaze'),
+      fade_ms: z
+        .number()
+        .int()
+        .min(0)
+        .max(10_000)
+        .optional()
+        .describe('How long the emotion takes to blend in, e.g. 0 for a sudden shock, 1500 for slowly turning sad'),
     },
   },
-  async ({ emotion, intensity, gesture, gaze, hold_ms }) => {
+  async ({ emotion, intensity, gesture, gaze, hold_ms, fade_ms }) => {
     if (!emotion && !gesture && !gaze) return { ...text('至少要指定 emotion、gesture、gaze 其中一個'), isError: true };
-    if (emotion) link.send({ type: 'emotion', emotion, intensity, holdMs: hold_ms });
+    if (emotion) link.send({ type: 'emotion', emotion, intensity, holdMs: hold_ms, fadeMs: fade_ms });
     if (gesture) link.send({ type: 'gesture', gesture });
     if (gaze) link.send({ type: 'gaze', target: gaze, holdMs: hold_ms });
     return text(`已表現${noPageNote()}`);

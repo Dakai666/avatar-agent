@@ -21,7 +21,7 @@ import { listSceneImages, sceneImageMime, sceneImagePath } from './sceneFiles.ts
  * Hub：本機唯一的 avatar 中樞（第一個搶到 port 的 MCP 行程擔任）。
  *
  *   /ws?role=page   瀏覽器頁面
- *   /ws?role=agent  其他 MCP 行程（relay）
+ *   /ws?role=agent  其他 MCP 行程（relay）；帶 build，比 hub 新就請 hub 讓位
  *   POST /hook      Claude Code hook 原始 payload（由 hub 對應成指令）
  *   POST /cmd       任意 agent 直接送 AvatarCommand
  *   GET  /status    連線狀態
@@ -69,13 +69,21 @@ export class Hub {
   private server: Server;
   private wss: WebSocketServer;
   private modelPath = readModelPath();
+  private retired = false;
+  /** 較新版本的 relay 連上來、本 hub 已讓出 port（由 AvatarLink 改當 relay） */
+  onRetire?: () => void;
 
   /** 本行程 MCP 的 ask 回答 */
   onLocalAnswer?: (a: AskAnswer) => void;
   onLocalAskFailed?: (id: string, reason: string) => void;
 
-  private constructor(server: Server) {
+  /** 本行程的程式版本（server 端檔案的最後修改時間） */
+  readonly build: number;
+
+  // server/ 由 Node 直接跑（type stripping）：不能用 constructor parameter properties
+  private constructor(server: Server, build: number) {
     this.server = server;
+    this.build = build;
     this.wss = new WebSocketServer({ noServer: true });
     server.on('request', (req, res) => this.handleHttp(req, res));
     server.on('upgrade', (req, socket, head) => {
@@ -85,28 +93,43 @@ export class Hub {
         return;
       }
       const role = url.searchParams.get('role');
+      const agentBuild = Number(url.searchParams.get('build') ?? 0);
       this.wss.handleUpgrade(req, socket, head, (ws) => {
         if (role === 'page') this.addPage(ws);
-        else if (role === 'agent' && !req.headers.origin) this.addAgent(ws);
-        else ws.close();
+        else if (role === 'agent' && !req.headers.origin) {
+          this.addAgent(ws);
+          // 常駐的舊行程（例如 agent 的背景 gateway）會一直抓著 hub；有更新的 session 出現就交給它
+          if (agentBuild > this.build) this.retire(agentBuild);
+        } else ws.close();
       });
     });
   }
 
   /** 嘗試成為 hub；port 被占用時回傳 null（改當 relay） */
-  static tryStart(port: number): Promise<Hub | null> {
+  static tryStart(port: number, build = 0): Promise<Hub | null> {
     return new Promise((res, rej) => {
       const server = createServer();
       server.once('error', (err: NodeJS.ErrnoException) => {
         if (err.code === 'EADDRINUSE') res(null);
         else rej(err);
       });
-      server.listen(port, BRIDGE_HOST, () => res(new Hub(server)));
+      server.listen(port, BRIDGE_HOST, () => res(new Hub(server, build)));
     });
   }
 
   get pageCount(): number {
     return this.pages.size;
+  }
+
+  /** 讓出 hub：未完成的提問回報失敗、關閉所有連線與 port；relay 們會在約 1 秒內搶到 port */
+  private retire(newerBuild: number): void {
+    if (this.retired) return;
+    this.retired = true;
+    console.error('[avatar] 有較新版本的 session 連上，交出 hub');
+    for (const ws of this.agents) this.toAgent(ws, { t: 'handover', build: newerBuild });
+    for (const [id, p] of [...this.pending]) this.failAsk(id, p, 'hub 交接中，請重試');
+    this.close();
+    this.onRetire?.();
   }
 
   close(): void {
@@ -247,7 +270,7 @@ export class Hub {
       }
       if (url.pathname === '/status') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ pages: this.pages.size, agents: this.agents.size, pendingAsks: this.pending.size }));
+        res.end(JSON.stringify({ pages: this.pages.size, agents: this.agents.size, pendingAsks: this.pending.size, build: this.build }));
         return;
       }
       if (url.pathname === '/scenes/list.json') {

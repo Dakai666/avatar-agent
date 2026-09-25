@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { readdirSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import WebSocket from 'ws';
 import type { AvatarCommand } from '../src/protocol.ts';
 import {
@@ -29,16 +31,42 @@ interface Waiter {
 
 const log = (...args: unknown[]) => console.error('[avatar]', ...args); // stdout 保留給 MCP
 
+/**
+ * 本行程的程式版本 = 啟動時 server/ 與共用協定檔的最後修改時間。
+ * 行程只在啟動時載入程式，改了檔案之後新開的 session 版本就比較大，用來觸發 hub 交接。
+ */
+export function currentBuild(): number {
+  const root = resolve(import.meta.dirname, '..');
+  const files = [
+    ...readdirSync(join(root, 'server')).map((f) => join(root, 'server', f)),
+    join(root, 'src', 'protocol.ts'),
+    join(root, 'src', 'bridgeProtocol.ts'),
+  ];
+  let max = 0;
+  for (const f of files) {
+    try {
+      max = Math.max(max, statSync(f).mtimeMs);
+    } catch {
+      /* 檔案消失就略過 */
+    }
+  }
+  return Math.floor(max);
+}
+
 export class AvatarLink {
   private hub: Hub | null = null;
   private relay: WebSocket | null = null;
   private relayPages = 0;
   private waiters = new Map<string, Waiter>();
   private closed = false;
+  /** hub 宣告要交給比本行程新的版本：斷線後晚點再搶 port，讓新版優先 */
+  private yieldToNewer = false;
   readonly port: number;
+  readonly build: number;
 
-  constructor(port = BRIDGE_PORT) {
+  constructor(port = BRIDGE_PORT, build = currentBuild()) {
     this.port = port;
+    this.build = build;
   }
 
   get mode(): 'hub' | 'relay' | 'connecting' {
@@ -58,11 +86,16 @@ export class AvatarLink {
 
   async start(): Promise<void> {
     if (this.closed) return;
-    const hub = await Hub.tryStart(this.port);
+    const hub = await Hub.tryStart(this.port, this.build);
     if (hub) {
       this.hub = hub;
       hub.onLocalAnswer = (a) => this.settle(a.id, { ok: true, answer: a });
       hub.onLocalAskFailed = (id, reason) => this.settle(id, { ok: false, reason: 'failed', detail: reason });
+      hub.onRetire = () => {
+        this.hub = null;
+        // 比 relay 的接手延遲（0.3~1 秒）更晚才重連，讓較新的行程先搶到 port
+        if (!this.closed) setTimeout(() => void this.start(), 1500);
+      };
       log(`hub 模式，頁面：${this.pageUrl}`);
       return;
     }
@@ -71,7 +104,7 @@ export class AvatarLink {
 
   private connectRelay(): Promise<void> {
     return new Promise((res) => {
-      const ws = new WebSocket(`ws://${BRIDGE_HOST}:${this.port}/ws?role=agent`);
+      const ws = new WebSocket(`ws://${BRIDGE_HOST}:${this.port}/ws?role=agent&build=${this.build}`);
       let opened = false;
       ws.on('open', () => {
         opened = true;
@@ -87,6 +120,7 @@ export class AvatarLink {
           return;
         }
         if (msg.t === 'status') this.relayPages = msg.pages;
+        else if (msg.t === 'handover') this.yieldToNewer = msg.build > this.build;
         else if (msg.t === 'answer') this.settle(msg.answer.id, { ok: true, answer: msg.answer });
         else if (msg.t === 'askFailed') {
           const noPage = msg.reason.includes('沒有開啟');
@@ -99,8 +133,10 @@ export class AvatarLink {
         this.relayPages = 0;
         for (const id of [...this.waiters.keys()]) this.settle(id, { ok: false, reason: 'failed', detail: '與 hub 斷線' });
         if (!opened) res();
-        // hub 所屬的 session 結束了 → 嘗試接手
-        if (!this.closed) setTimeout(() => void this.start(), 300 + Math.random() * 700);
+        // hub 所屬的 session 結束了 → 嘗試接手（交接給新版時，舊版晚點再試）
+        const delay = (this.yieldToNewer ? 1500 : 300) + Math.random() * 700;
+        this.yieldToNewer = false;
+        if (!this.closed) setTimeout(() => void this.start(), delay);
       });
     });
   }

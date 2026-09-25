@@ -52,4 +52,6 @@ export type AgentToHub =
 export type HubToAgent =
   | { t: 'answer'; answer: AskAnswer }
   | { t: 'askFailed'; id: string; reason: string }
-  | { t: 'status'; pages: number };
+  | { t: 'status'; pages: number }
+  /** hub 即將讓位給這個版本的行程；版本較舊的 relay 要晚點再搶 port */
+  | { t: 'handover'; build: number };

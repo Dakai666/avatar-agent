@@ -33,6 +33,8 @@ export class IntentScheduler {
   private pending: { state: AvatarState; at: number; firstAt: number } | null = null;
   private gestureQueue: Gesture[] = [];
   private emotionUntil = 0;
+  /** 目前表情來自 say 的 emotion：說話期間維持，說完 0.8 秒後回到狀態預設 */
+  private speechEmotion = false;
   private speech: SpeechPlayer;
   private speechPhase: 'none' | 'prep' | 'talk' | 'tail' = 'none';
   private speechPhaseAt = 0;
@@ -53,11 +55,17 @@ export class IntentScheduler {
     private gaze: GazeController,
   ) {
     this.speech = new SpeechPlayer((cue) => {
-      if (cue === 'exclaim') this.body.playGesture('nod');
-      else if (cue === 'question') this.body.playGesture('tilt');
+      if (cue === 'exclaim') this.cueGesture('nod');
+      else if (cue === 'question') this.cueGesture('tilt');
       else if (cue === 'pause' && Math.random() < 0.5) this.face.blink.trigger();
     });
     this.applyState('idle', true);
+  }
+
+  /** 語句標點帶出的小手勢是點綴：有手勢在播或在排隊時就略過，不打斷、也不擠掉 agent 的手勢 */
+  private cueGesture(g: Gesture): void {
+    if (this.gestureQueue.length || this.body.activeGesture) return;
+    this.startGesture(g);
   }
 
   private emit(kind: LogEntry['kind'], text: string): void {
@@ -81,6 +89,7 @@ export class IntentScheduler {
       case 'emotion':
         this.face.setEmotion(cmd.emotion, cmd.intensity ?? 0.8);
         this.emotionUntil = this.now + (cmd.holdMs ?? 2500);
+        this.speechEmotion = false; // 明確指定的情緒優先於 say 的情緒，照自己的 holdMs 衰減
         this.emit('apply', `情緒 ${cmd.emotion}`);
         return;
       case 'gesture':
@@ -129,7 +138,7 @@ export class IntentScheduler {
     this.body.breathRate.target = def.breath;
     this.body.typing.target = def.typing ? 1 : 0;
     this.face.bias = def.face;
-    if (this.now >= this.emotionUntil) this.face.setEmotion(def.emotion.emotion, def.emotion.intensity);
+    if (this.now >= this.emotionUntil && !this.speechEmotion) this.face.setEmotion(def.emotion.emotion, def.emotion.intensity);
     this.face.blink.rate = def.blinkRate;
     this.gaze.setBase(def.gaze);
     this.gaze.energy = def.energy;
@@ -144,7 +153,7 @@ export class IntentScheduler {
     this.dialogName = cmd.name ?? '';
     if (cmd.emotion) {
       this.face.setEmotion(cmd.emotion, 0.7);
-      this.emotionUntil = this.now + 1e9; // 說話期間維持
+      this.speechEmotion = true;
     }
     // 預備：先進入說話姿態、看向使用者、吸一口氣，再開口
     this.applyState('speaking');
@@ -193,7 +202,9 @@ export class IntentScheduler {
         this.beginSpeech(next);
       } else if (now - this.speechPhaseAt >= SPEECH_TAIL_MS) {
         this.speechPhase = 'none';
-        this.emotionUntil = now + 800; // 說完後表情再留一下才回去
+        // 說完後表情再留一下才回去；說話中另外指定的情緒保留自己的 holdMs
+        this.emotionUntil = this.speechEmotion ? now + 800 : Math.max(this.emotionUntil, now + 800);
+        this.speechEmotion = false;
         // 說話期間若有新狀態進來，pending 會接手；否則回到說話前的狀態
         if (!this.pending) this.pending = { state: this.stateBeforeSpeech === 'speaking' ? 'idle' : this.stateBeforeSpeech, at: now - COALESCE_MS, firstAt: now };
       }

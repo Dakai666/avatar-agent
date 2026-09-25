@@ -73,7 +73,52 @@ Claude Code ──stdio──▶ server/mcp.ts ──┐
 | PostToolUseFailure | 短暫難過 |
 | Stop / StopFailure | 閒置 / 困擾 |
 
-hook 以 `async` 執行，不會拖慢 Claude；轉發器只送事件名與工具名，不送 payload 其他內容。
+hook 以 `async` 執行，不會拖慢 Claude；轉發器只送事件名、工具名與狀態旗標，不送工具參數或檔案內容。
+
+### Hermes Agent
+
+Hermes（Nous Research）也能驅動同一個角色：MCP 工具直接可用，工作狀態靠 Hermes 的 shell hooks。
+兩者可同時開，共用同一個 hub。在 `~/.hermes/config.yaml` 加入（路徑換成本專案的實際位置）：
+
+```yaml
+mcp_servers:
+  avatar:
+    command: "node"
+    args: ["C:/path/to/avatar-agent/server/mcp.ts"]
+    timeout: 600          # avatar_ask 會等到使用者回答
+
+hooks:
+  - event: pre_tool_call
+    command: node C:/path/to/avatar-agent/server/hook.ts
+    timeout: 2
+  - event: on_session_end
+    command: node C:/path/to/avatar-agent/server/hook.ts
+    timeout: 2
+  # 以下選用：每多一個事件，Hermes 就多等一次 hook（約 0.1 秒）
+  - event: on_session_start
+    command: node C:/path/to/avatar-agent/server/hook.ts
+    timeout: 2
+  - event: pre_llm_call
+    command: node C:/path/to/avatar-agent/server/hook.ts
+    timeout: 2
+  - event: post_tool_call
+    command: node C:/path/to/avatar-agent/server/hook.ts
+    timeout: 2
+  - event: pre_approval_request
+    command: node C:/path/to/avatar-agent/server/hook.ts
+    timeout: 2
+```
+
+| Hermes 事件 | 角色 |
+|---|---|
+| on_session_start | 揮手 + 開心 |
+| pre_llm_call | 思考 |
+| pre_tool_call | read_file/search_files/web_* → 閱讀；terminal/patch/write_file → 工作；delegate_task/todo_list → 思考；clarify → 等待 |
+| post_tool_call（status ≠ ok） | 短暫難過 |
+| pre_approval_request | 等待回應 |
+| on_session_end | 閒置；未完成且非中斷 → 困擾 |
+
+注意：Hermes 的 shell hook 是**同步**的（沒有 async 選項），每次約 0.1 秒；第一次執行每個 hook 時 Hermes 會要求確認一次。
 
 ### 多 session
 
